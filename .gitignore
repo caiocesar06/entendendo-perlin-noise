@@ -1,0 +1,17 @@
+# Build files
+/build/
+
+# Visual Studio / VSCode
+/.vscode/
+*.suo
+*.user
+*.vcxproj*
+
+# executables
+*.exe
+*.dll
+*.obj
+*.o
+
+# vcpkg
+/vcpkg/
