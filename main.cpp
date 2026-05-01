@@ -54,6 +54,8 @@ struct PerlinNoise {
         // 3. Aplicar a função fade em u e v
         double u = fade(x);
         double v = fade(y);
+        // double u = x;
+        // double v = y;
 
         // 4. Pegar os hashes dos 4 cantos da célula
         int h00 = p[p[i] + j];
@@ -108,7 +110,7 @@ int main() {
     int octaves = 6;
     double persistence = 0.5;
     double lacunarity = 2.0;
-    double scale = 0.05;
+    double scale = 0.01;
 
     bool needsUpdate = true;
 
