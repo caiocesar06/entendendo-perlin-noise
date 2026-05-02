@@ -15,3 +15,6 @@
 
 # vcpkg
 /vcpkg/
+
+/figs/
+explicacao-geral-perlin.md
