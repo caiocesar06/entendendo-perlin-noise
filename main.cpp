@@ -6,74 +6,96 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Utilitários
+// ─────────────────────────────────────────────────────────────────────────────
 
 inline int fastFloor(float x) {
     int xi = (int)x;
     return x < xi ? xi - 1 : xi;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Modos de suavização (Fade)
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum class FadeMode { NONE, CUBIC, QUINTIC };
+
+const char* fadeName(FadeMode m) {
+    switch (m) {
+    case FadeMode::NONE:    return "NONE    (linear)";
+    case FadeMode::CUBIC:   return "CUBIC   (3t²-2t³)  [Perlin 1985]";
+    case FadeMode::QUINTIC: return "QUINTIC (6t⁵-15t⁴+10t³) [Perlin 2002]";
+    }
+    return "?";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Perlin Noise
+// ─────────────────────────────────────────────────────────────────────────────
+
 struct PerlinNoise {
-    std::vector<int> p; // Tabela de permutação
 
-    // Construtor: Inicializa e embaralha a tabela de permutação com uma semente
-    PerlinNoise(unsigned int seed) {
+    // Vetores gradiente 2D: 4 cardeais + 4 diagonais unitárias
+    static constexpr float G2D[8][2] = {
+        { 1.0f,       0.0f      }, {-1.0f,       0.0f      },
+        { 0.0f,       1.0f      }, { 0.0f,      -1.0f      },
+        { 0.707106f,  0.707106f }, {-0.707106f,  0.707106f },
+        { 0.707106f, -0.707106f }, {-0.707106f, -0.707106f }
+    };
+
+    std::vector<int> p; // Tabela de permutação (512 = 256 duplicado)
+    FadeMode fadeMode;
+
+    // Construtor: embaralha a tabela com uma semente via Fisher-Yates
+    PerlinNoise(unsigned int seed, FadeMode mode = FadeMode::QUINTIC) : fadeMode(mode)
+    {
         p.resize(256);
-        std::iota(p.begin(), p.end(), 0); // Preenche de 0 a 255
-
+        std::iota(p.begin(), p.end(), 0);
         std::default_random_engine engine(seed);
-        std::shuffle(p.begin(), p.end(), engine); // Embaralha (Fisher-Yates)
-
-        // Duplica para 512 para evitar overflow
-        p.insert(p.end(), p.begin(), p.end());
+        std::shuffle(p.begin(), p.end(), engine);
+        p.insert(p.end(), p.begin(), p.end()); // duplica → 512
     }
 
-    // Função de suavização (Fade)
+    // ── Funções de suavização ────────────────────────────────────────────────
+
+    // Sem suavização: interpolação linear pura — grade visível
+    float fadeNone(float t) { return t; }
+
+    // Cúbica (Perlin 1985) — garante C¹, mas não C²
+    float fadeCubic(float t) { return t * t * (3.0f - 2.0f * t); }
+
+    // Quíntica (Perlin 2002) — garante C²: f'(0)=f'(1)=f''(0)=f''(1)=0
+    float fadeQuintic(float t) { return t * t * t * (t * (6.0f * t - 15.0f) + 10.0f); }
+
     float fade(float t) {
-        return t * t * t * (t * (6 * t - 15) + 10);
-        // return t * t * (3 - 2 * t);
+        switch (fadeMode) {
+        case FadeMode::NONE:    return fadeNone(t);
+        case FadeMode::CUBIC:   return fadeCubic(t);
+        case FadeMode::QUINTIC: return fadeQuintic(t);
+        }
+        return t;
     }
 
-    // float fade(float t) {
-    //     const float PI = 3.14159265358979323846;
-    //     return (1.0 - cos(t * PI)) * 0.5;
-    // }
+    // ── Interpolação linear ──────────────────────────────────────────────────
 
-    // Interpolação linear
-    float lerp(float t, float a, float b) {
-        return a + t * (b - a);
-    }
+    float lerp(float t, float a, float b) { return a + t * (b - a); }
 
-    // Seleção do gradiente e produto escalar
-    // float grad(int hash, float x, float y) {
-    //     int h = hash & 7;
-    //     float u = h < 4 ? x : y;
-    //     float v = h < 4 ? y : x;
-
-    //     // Simula o produto escalar com direções fixas
-    //     return ((h & 1) ? -u : u) + ((h & 2) ? -v : v);
-    // }
+    // ── Gradiente: produto escalar com vetor de distância ───────────────────
 
     float grad(int hash, float x, float y) {
-        // Conjunto G_2D: 8 vetores unitários uniformes (cardeais e diagonais)
-        const float G2D[8][2] = {
-            {1.0, 0.0}, {-1.0, 0.0},
-            {0.0, 1.0}, {0.0, -1.0},
-            {0.707106, 0.707106}, {-0.707106, 0.707106},
-            {0.707106, -0.707106}, {-0.707106, -0.707106}
-        };
-
-        int h = hash & 7; // Escolhe um índice de 0 a 7
-
-        // Calcula o produto escalar explicitamente
+        int h = hash & 7;
         return G2D[h][0] * x + G2D[h][1] * y;
     }
 
-    // Função principal do ruído de uma oitava
+    // ── Ruído de uma oitava ──────────────────────────────────────────────────
+
     float noise(float x, float y) {
-        // 1. Encontrar coordenadas da célula (floor)
+        // 1. Célula da grade
         int xi = fastFloor(x);
         int yi = fastFloor(y);
-
         int i = xi & 255;
         int j = yi & 255;
 
@@ -81,32 +103,33 @@ struct PerlinNoise {
         float xf = x - xi;
         float yf = y - yi;
 
-        // 3. Aplicar a função fade em u e v
+        // 3. Fade
         float u = fade(xf);
         float v = fade(yf);
-        // float u = x;
-        // float v = y;
 
-        // 4. Pegar os hashes dos 4 cantos da célula
+        // 4. Hash dos 4 cantos via tabela de permutação
         int h00 = p[p[i] + j];
         int h01 = p[p[i] + j + 1];
         int h10 = p[p[i + 1] + j];
         int h11 = p[p[i + 1] + j + 1];
 
-        // 5. Calcular o dot product de cada canto
-        float x1 = lerp(u, grad(h00, xf, yf), grad(h10, xf - 1, yf));
-        float x2 = lerp(u, grad(h01, xf, yf - 1), grad(h11, xf - 1, yf - 1));
+        // 5. Dot products + interpolação bilinear
+        float x1 = lerp(u, grad(h00, xf, yf),
+            grad(h10, xf - 1.0f, yf));
+        float x2 = lerp(u, grad(h01, xf, yf - 1.0f),
+            grad(h11, xf - 1.0f, yf - 1.0f));
 
-        // 6. Interpolar tudo de forma bilinear
-        return lerp(v, x1, x2);
+        return lerp(v, x1, x2); // resultado em [-1, 1] (aproximado)
     }
 
-    // Função de múltiplas escalas (Fractal Brownian Motion)
-    float fBm(float x, float y, int octaves, float persistence, float lacunarity) {
-        float total = 0.0;
-        float amplitude = 1.0;
-        float frequency = 1.0;
-        float maxValue = 0.0;
+    // ── fBm: soma de oitavas (Fractal Brownian Motion) ───────────────────────
+
+    float fBm(float x, float y, int octaves, float persistence, float lacunarity)
+    {
+        float total = 0.0f;
+        float amplitude = 1.0f;
+        float frequency = 1.0f;
+        float maxValue = 0.0f;
 
         for (int i = 0; i < octaves; ++i) {
             total += noise(x * frequency, y * frequency) * amplitude;
@@ -115,278 +138,344 @@ struct PerlinNoise {
             frequency *= lacunarity;
         }
 
-        return total / maxValue;
+        return total / maxValue; // normalizado em [-1, 1]
     }
+
+    // ── Acesso público ao hash (usado pelo debug visual) ─────────────────────
 
     int getHash(int i, int j) const {
         return p[p[i & 255] + (j & 255)];
     }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// main
+// ─────────────────────────────────────────────────────────────────────────────
+
 int main() {
     const unsigned int WIDTH = 800;
     const unsigned int HEIGHT = 600;
 
-    sf::RenderWindow window(sf::VideoMode(sf::Vector2u(WIDTH, HEIGHT)), "Visualizador Perlin Noise");
-    sf::Image image(sf::Vector2u(WIDTH, HEIGHT), sf::Color::Black);
+    sf::RenderWindow window(
+        sf::VideoMode(sf::Vector2u(WIDTH, HEIGHT)),
+        "Visualizador Perlin Noise"
+    );
 
     sf::Texture texture;
+    {
+        sf::Image blank(sf::Vector2u(WIDTH, HEIGHT), sf::Color::Black);
+        texture.loadFromImage(blank);
+    }
     sf::Sprite sprite(texture);
 
-    if (texture.loadFromImage(image)) {
-        sprite.setTexture(texture, true);
-    }
+    // ── Estado ───────────────────────────────────────────────────────────────
 
-    // Semente inicial
     PerlinNoise pn(42);
 
-    // Parâmetros do fBm
-    int octaves = 6;
-    float persistence = 0.5;
-    float lacunarity = 2.0;
-    float scale = 0.01;
+    int   octaves = 6;
+    float persistence = 0.5f;
+    float lacunarity = 2.0f;
+    float scale = 0.01f;
+    float degrees = 12.0f; // níveis de posterização
+    float offsetX = 0.0f;
+    float offsetY = 0.0f;
 
     bool needsUpdate = true;
-
     bool showDebug = false;
     bool fBmOn = true;
 
-    float offsetX = 0.0f, offsetY = 0.0f;
+    // Posição do mouse — atualizada todo frame para o display do valor
+    sf::Vector2i lastMousePos(-1, -1);
+
+    // ── Helpers de log ───────────────────────────────────────────────────────
+
+    auto printStatus = [&]() {
+        printf("scale=%.4f | octaves=%d | persistence=%.2f | lacunarity=%.2f"
+            " | fBm=%s | fade=%s\n\n",
+            scale, octaves, persistence, lacunarity,
+            fBmOn ? "ON" : "OFF",
+            fadeName(pn.fadeMode));
+        };
+
+    // ── Loop principal ────────────────────────────────────────────────────────
 
     while (window.isOpen()) {
-        while (auto event = window.pollEvent()) {
-            if (event->is<sf::Event::Closed>()) {
-                window.close();
-            }
 
+        // ── Eventos ──────────────────────────────────────────────────────────
+
+        while (auto event = window.pollEvent()) {
+
+            if (event->is<sf::Event::Closed>())
+                window.close();
+
+            // Zoom centrado no cursor
             if (auto* scroll = event->getIf<sf::Event::MouseWheelScrolled>()) {
                 float factor = (scroll->delta > 0) ? 0.9f : 1.1f;
+                float oldScale = scale;
                 scale *= factor;
+
+                float targetX = WIDTH / 2.0f;
+                float targetY = HEIGHT / 2.0f;
+
+                sf::Vector2i mp = sf::Mouse::getPosition(window);
+                if (mp.x >= 0 && mp.x < (int)WIDTH &&
+                    mp.y >= 0 && mp.y < (int)HEIGHT) {
+                    targetX = (float)mp.x;
+                    targetY = (float)mp.y;
+                }
+
+                float ratio = oldScale / scale;
+                offsetX = (targetX + offsetX) * ratio - targetX;
+                offsetY = (targetY + offsetY) * ratio - targetY;
+
                 needsUpdate = true;
             }
 
-            if (event->is<sf::Event::KeyPressed>()) {
-                auto* keyEvent = event->getIf<sf::Event::KeyPressed>();
+            if (auto* key = event->getIf<sf::Event::KeyPressed>()) {
 
-                // Pressione Espaço para gerar uma nova semente e forçar o redesenho
-                if (keyEvent && keyEvent->code == sf::Keyboard::Key::Space) {
-                    pn = PerlinNoise(std::random_device{}());
-                    offsetX = 0.0f; offsetY = 0.0f;
-                    needsUpdate = true;
-                }
+                switch (key->code) {
 
-                // Pressione ESC para fechar a janela
-                if (keyEvent && keyEvent->code == sf::Keyboard::Key::Escape) {
-                    window.close();
-                }
+                        // Fechar
+                    case sf::Keyboard::Key::Escape:
+                        window.close();
+                        break;
 
-                // Pressione TAB para mostrar o Debug
-                if (keyEvent && keyEvent->code == sf::Keyboard::Key::Tab) {
-                    showDebug = !showDebug; // Inverte o booleano
-                }
+                        // Nova semente aleatória
+                    case sf::Keyboard::Key::Space:
+                        pn = PerlinNoise(std::random_device{}(), pn.fadeMode);
+                        offsetX = offsetY = 0.0f;
+                        needsUpdate = true;
+                        break;
 
-                // Pressione F para ativar o fBm
-                if (keyEvent && keyEvent->code == sf::Keyboard::Key::F) {
-                    fBmOn = !fBmOn; // Inverte o booleano
-                    needsUpdate = true;
-                }
+                        // Debug visual (grade + gradientes + corte)
+                    case sf::Keyboard::Key::Tab:
+                        showDebug = !showDebug;
+                        break;
 
-                // Câmera de Navegação
-                float moveSpeed = 20.0f; // Move 20 pixels por clique
-                if (keyEvent && keyEvent->code == sf::Keyboard::Key::W) {
-                    offsetY -= moveSpeed; // W move a câmera para cima (Y diminui)
-                    needsUpdate = true;
-                }
-                if (keyEvent && keyEvent->code == sf::Keyboard::Key::S) {
-                    offsetY += moveSpeed; // S move a câmera para baixo
-                    needsUpdate = true;
-                }
-                if (keyEvent && keyEvent->code == sf::Keyboard::Key::D) {
-                    offsetX += moveSpeed; // D move para a direita
-                    needsUpdate = true;
-                }
-                if (keyEvent && keyEvent->code == sf::Keyboard::Key::A) {
-                    offsetX -= moveSpeed; // A move para a esquerda
-                    needsUpdate = true;
+                        // Toggle fBm
+                    case sf::Keyboard::Key::F:
+                        fBmOn = !fBmOn;
+                        needsUpdate = true;
+                        printStatus();
+                        break;
+
+                        // Cicla modo de fade: NONE → CUBIC → QUINTIC → NONE ...
+                    case sf::Keyboard::Key::V:
+                        pn.fadeMode = (FadeMode)(((int)pn.fadeMode + 1) % 3);
+                        needsUpdate = true;
+                        printStatus();
+                        break;
+
+                        // Oitavas
+                    case sf::Keyboard::Key::O:
+                        octaves = std::max(1, octaves - 1);
+                        needsUpdate = true; printStatus(); break;
+                    case sf::Keyboard::Key::P:
+                        octaves = std::min(16, octaves + 1);
+                        needsUpdate = true; printStatus(); break;
+
+                        // Persistência
+                    case sf::Keyboard::Key::Num1:
+                    case sf::Keyboard::Key::Numpad1:
+                        persistence = std::max(0.0f, persistence - 0.05f);
+                        needsUpdate = true; printStatus(); break;
+                    case sf::Keyboard::Key::Num2:
+                    case sf::Keyboard::Key::Numpad2:
+                        persistence = std::min(2.0f, persistence + 0.05f);
+                        needsUpdate = true; printStatus(); break;
+
+                        // Lacunaridade
+                    case sf::Keyboard::Key::Num3:
+                    case sf::Keyboard::Key::Numpad3:
+                        lacunarity = std::max(1.0f, lacunarity - 0.1f);
+                        needsUpdate = true; printStatus(); break;
+                    case sf::Keyboard::Key::Num4:
+                    case sf::Keyboard::Key::Numpad4:
+                        lacunarity += 0.1f;
+                        needsUpdate = true; printStatus(); break;
+
+                        // Posterização
+                    case sf::Keyboard::Key::Z:
+                        degrees = std::max(2.0f, degrees - 1.0f);
+                        needsUpdate = true; break;
+                    case sf::Keyboard::Key::X:
+                        degrees += 1.0f;
+                        needsUpdate = true; break;
+
+                        // Navegação (câmera)
+                    case sf::Keyboard::Key::W:
+                        offsetY -= 20.0f / scale * 0.01f;
+                        needsUpdate = true; break;
+                    case sf::Keyboard::Key::S:
+                        offsetY += 20.0f / scale * 0.01f;
+                        needsUpdate = true; break;
+                    case sf::Keyboard::Key::A:
+                        offsetX -= 20.0f / scale * 0.01f;
+                        needsUpdate = true; break;
+                    case sf::Keyboard::Key::D:
+                        offsetX += 20.0f / scale * 0.01f;
+                        needsUpdate = true; break;
+
+                    default: break;
                 }
             }
         }
 
+        // ── Renderização do mapa de ruído ─────────────────────────────────────
+
         if (needsUpdate) {
-            // Buffer de pixels (Largura * Altura * 4 canais RGBA)
             std::vector<std::uint8_t> pixelBuffer(WIDTH * HEIGHT * 4);
 
-            auto start = std::chrono::high_resolution_clock::now();
-            // Varre todos os pixels da tela
-            for (int y = 0; y < HEIGHT; ++y) {
-                for (int x = 0; x < WIDTH; ++x) {
+            auto t0 = std::chrono::high_resolution_clock::now();
 
+            for (int y = 0; y < (int)HEIGHT; ++y) {
+                for (int x = 0; x < (int)WIDTH; ++x) {
                     float nx = (x + offsetX) * scale;
                     float ny = (y + offsetY) * scale;
 
-                    float noiseValue = (x < WIDTH / 2) ?
-                        pn.noise(nx, ny) :
-                        pn.fBm(nx, ny, octaves, persistence, lacunarity);
+                    float val = fBmOn
+                        ? pn.fBm(nx, ny, octaves, persistence, lacunarity)
+                        : pn.noise(nx, ny);
 
-                    float normalized = (noiseValue + 1.0) / 2.0;
-
-                    float degrees = 12.0;
+                    float normalized = (val + 1.0f) / 2.0f;
                     float posterized = fastFloor(normalized * degrees) / degrees;
+                    int   c = (int)(posterized * 255.0f);
+                    if (c < 0)   c = 0;
+                    if (c > 255) c = 255;
 
-                    // Converte o retorno (assumido [-1, 1]) para o espaço de cor [0, 255]
-                    int colorValue = (int)(posterized * 255.0);
-
-                    if (colorValue < 0) colorValue = 0;
-                    if (colorValue > 255) colorValue = 255;
-
-                    // Mapeamento analítico do espaço bidimensional (x, y) para o índice do arranjo unidimensional
-                    int index = (y * WIDTH + x) * 4;
-
-                    // Escrita incisiva e direta nos bytes da memória RAM (operação de ínfima latência)
-                    pixelBuffer[index + 0] = colorValue; // Canal Primário (Red)
-                    pixelBuffer[index + 1] = colorValue; // Canal Secundário (Green)
-                    pixelBuffer[index + 2] = colorValue; // Canal Terciário (Blue)
-                    pixelBuffer[index + 3] = 255;        // Canal de Opacidade (Alpha estritamente opaco)
+                    int idx = (y * WIDTH + x) * 4;
+                    pixelBuffer[idx + 0] = (uint8_t)c;
+                    pixelBuffer[idx + 1] = (uint8_t)c;
+                    pixelBuffer[idx + 2] = (uint8_t)c;
+                    pixelBuffer[idx + 3] = 255;
                 }
             }
 
-            auto end = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double, std::milli> ms_double = end - start;
-            printf("Tempo de geracao: %f ms\n", ms_double.count());
+            auto t1 = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<double, std::milli> dt = t1 - t0;
+            printf("Tempo de geracao: %.2f ms\n", dt.count());
+            printStatus();
 
-            // Transferência em bloco da matriz de pixels da Memória Principal para a Memória de Vídeo (VRAM)
             texture.update(pixelBuffer.data());
-
             needsUpdate = false;
-
-            // Após qualquer mudança de parâmetro:
-            printf("scale=%.4f | octaves=%d | persistence=%.2f | lacunarity=%.2f | fBm=%s\n",
-                scale, octaves, persistence, lacunarity, fBmOn ? "ON" : "OFF");
         }
+
+        // ── Valor do ruído sob o cursor (atualizado todo frame) ───────────────
+
+        sf::Vector2i mp = sf::Mouse::getPosition(window);
+
+        if (mp.x >= 0 && mp.x < (int)WIDTH &&
+            mp.y >= 0 && mp.y < (int)HEIGHT &&
+            mp != lastMousePos)
+        {
+            lastMousePos = mp;
+
+            float nx = (mp.x + offsetX) * scale;
+            float ny = (mp.y + offsetY) * scale;
+            float val = fBmOn
+                ? pn.fBm(nx, ny, octaves, persistence, lacunarity)
+                : pn.noise(nx, ny);
+
+            // \r sobrescreve a linha — não polui o terminal
+            printf("\r[px %4d, %4d] | ruido = %+.5f   ", mp.x, mp.y, val);
+            fflush(stdout);
+        }
+
+        // ── Desenho ───────────────────────────────────────────────────────────
 
         window.clear();
         window.draw(sprite);
 
-        // SÓ CONSTROÍ E DESENHA SE O DEBUG ESTIVER ATIVADO
         if (showDebug) {
-            // ==========================================
-            // DEBUG VISUAL: DESENHANDO A GRADE E VETORES
-            // ==========================================
             float cellSize = 1.0f / scale;
 
-            sf::VertexArray gridLines(sf::PrimitiveType::Lines);
-            sf::Color gridColor(255, 255, 255, 50);
+            // Guard: só desenha se a grade couber razoavelmente na tela
+            if (cellSize > 20.0f && cellSize < (float)WIDTH) {
 
-            for (float x = 0; x <= WIDTH; x += cellSize) {
-                gridLines.append(sf::Vertex{ sf::Vector2f(x, 0.f), gridColor });
-                gridLines.append(sf::Vertex{ sf::Vector2f(x, (float)HEIGHT), gridColor });
-            }
-            for (float y = 0; y <= HEIGHT; y += cellSize) {
-                gridLines.append(sf::Vertex{ sf::Vector2f(0.f, y), gridColor });
-                gridLines.append(sf::Vertex{ sf::Vector2f((float)WIDTH, y), gridColor });
-            }
-            window.draw(gridLines);
+                // Grade
+                sf::VertexArray gridLines(sf::PrimitiveType::Lines);
+                sf::Color gridColor(255, 255, 255, 50);
 
-            sf::VertexArray gradients(sf::PrimitiveType::Lines);
-
-            const float G2D[8][2] = {
-                {1.0, 0.0}, {-1.0, 0.0}, {0.0, 1.0}, {0.0, -1.0},
-                {0.707106, 0.707106}, {-0.707106, 0.707106},
-                {0.707106, -0.707106}, {-0.707106, -0.707106}
-            };
-
-            for (float y = 0; y <= HEIGHT; y += cellSize) {
                 for (float x = 0; x <= WIDTH; x += cellSize) {
-                    int i = (int)((x + offsetX) * scale) & 255;
-                    int j = (int)((y + offsetY) * scale) & 255;
-
-                    int hash = pn.getHash(i, j);
-                    int h = hash & 7;
-
-                    float gx = G2D[h][0];
-                    float gy = G2D[h][1];
-
-                    sf::Vector2f start(x, y);
-                    sf::Vector2f end((float)(x + gx * (cellSize * 0.4)), (float)(y + gy * (cellSize * 0.4)));
-
-                    gradients.append(sf::Vertex{ start, sf::Color(255, 0, 0) });
-                    gradients.append(sf::Vertex{ end, sf::Color(255, 0, 0) });
-
-                    const float PI = 3.14159265f;
-                    float arrowLength = cellSize * 0.1f;
-                    float arrowAngle = PI / 6.0f;
-                    float angle = atan2((float)gy, (float)gx);
-
-                    float leftAngle = angle + PI - arrowAngle;
-                    sf::Vector2f leftBarb(
-                        end.x + cos(leftAngle) * arrowLength,
-                        end.y + sin(leftAngle) * arrowLength
-                    );
-
-                    float rightAngle = angle + PI + arrowAngle;
-                    sf::Vector2f rightBarb(
-                        end.x + cos(rightAngle) * arrowLength,
-                        end.y + sin(rightAngle) * arrowLength
-                    );
-
-                    gradients.append(sf::Vertex{ end, sf::Color(255, 0, 0) });
-                    gradients.append(sf::Vertex{ leftBarb, sf::Color(255, 0, 0) });
-
-                    gradients.append(sf::Vertex{ end, sf::Color(255, 0, 0) });
-                    gradients.append(sf::Vertex{ rightBarb, sf::Color(255, 0, 0) });
+                    gridLines.append({ sf::Vector2f(x, 0.f),          gridColor });
+                    gridLines.append({ sf::Vector2f(x, (float)HEIGHT), gridColor });
                 }
+                for (float y = 0; y <= HEIGHT; y += cellSize) {
+                    gridLines.append({ sf::Vector2f(0.f,         y), gridColor });
+                    gridLines.append({ sf::Vector2f((float)WIDTH, y), gridColor });
+                }
+                window.draw(gridLines);
+
+                // Vetores gradiente com seta
+                sf::VertexArray gradients(sf::PrimitiveType::Lines);
+                const float PI = 3.14159265f;
+
+                for (float y = 0; y <= HEIGHT; y += cellSize) {
+                    for (float x = 0; x <= WIDTH; x += cellSize) {
+                        int i = (int)((x + offsetX) * scale) & 255;
+                        int j = (int)((y + offsetY) * scale) & 255;
+
+                        int h = pn.getHash(i, j) & 7;
+                        float gx = PerlinNoise::G2D[h][0];
+                        float gy = PerlinNoise::G2D[h][1];
+
+                        sf::Vector2f orig(x, y);
+                        sf::Vector2f tip(x + gx * cellSize * 0.4f,
+                            y + gy * cellSize * 0.4f);
+
+                        gradients.append({ orig, sf::Color(255, 0, 0) });
+                        gradients.append({ tip,  sf::Color(255, 0, 0) });
+
+                        // Ponta da seta
+                        float arrowLen = cellSize * 0.1f;
+                        float angle = std::atan2(gy, gx);
+                        float arrowAngle = PI / 6.0f;
+
+                        for (int side : {-1, 1}) {
+                            float a = angle + PI + side * arrowAngle;
+                            sf::Vector2f barb(tip.x + std::cos(a) * arrowLen,
+                                tip.y + std::sin(a) * arrowLen);
+                            gradients.append({ tip,  sf::Color(255, 0, 0) });
+                            gradients.append({ barb, sf::Color(255, 0, 0) });
+                        }
+                    }
+                }
+                window.draw(gradients);
+
+                // Corte transversal interativo
+                sf::Vector2i mousePos = sf::Mouse::getPosition(window);
+                float cutY = (float)(HEIGHT / 2);
+                if (mousePos.x >= 0 && mousePos.x < (int)WIDTH &&
+                    mousePos.y >= 0 && mousePos.y < (int)HEIGHT)
+                    cutY = (float)mousePos.y;
+
+                sf::VertexArray cutLine(sf::PrimitiveType::Lines);
+                cutLine.append({ sf::Vector2f(0.f,         cutY), sf::Color(0, 255, 0, 200) });
+                cutLine.append({ sf::Vector2f((float)WIDTH, cutY), sf::Color(0, 255, 0, 200) });
+                window.draw(cutLine);
+
+                // Perfil do terreno na linha de corte
+                sf::VertexArray profile(sf::PrimitiveType::LineStrip);
+                float graphBaseY = HEIGHT - 80.0f;
+                float amplitude = 60.0f;
+
+                for (float x = 0; x <= WIDTH; x += 1.0f) {
+                    float nx = (x + offsetX) * scale;
+                    float ny = (cutY + offsetY) * scale;
+                    float v = fBmOn
+                        ? pn.fBm(nx, ny, octaves, persistence, lacunarity)
+                        : pn.noise(nx, ny);
+                    profile.append({ sf::Vector2f(x, graphBaseY - v * amplitude),
+                                     sf::Color(255, 255, 0) });
+                }
+
+                sf::VertexArray zeroLine(sf::PrimitiveType::Lines);
+                zeroLine.append({ sf::Vector2f(0.f,          graphBaseY), sf::Color(255, 165, 0, 100) });
+                zeroLine.append({ sf::Vector2f((float)WIDTH, graphBaseY), sf::Color(255, 165, 0, 100) });
+
+                window.draw(zeroLine);
+                window.draw(profile);
             }
-
-            window.draw(gradients);
-
-            // ==========================================
-            // DEBUG ANALÍTICO: CORTE TRANSVERSAL INTERATIVO
-            // ==========================================
-
-            // 1. O plano de corte acompanha o eixo Y do mouse
-            float cutY = (float)(HEIGHT / 2); // Posição padrão caso o mouse esteja fora
-
-            sf::Vector2i mousePos = sf::Mouse::getPosition(window);
-
-            // Verifica se o ponteiro está dentro dos limites da janela
-            if (mousePos.x >= 0 && mousePos.x < (int)WIDTH && mousePos.y >= 0 && mousePos.y < (int)HEIGHT) {
-                cutY = (float)mousePos.y; // Atualiza a linha de corte para o mouse
-            }
-
-            // Desenha a "linha de corte" vermelha em cima do mapa 2D
-            sf::VertexArray cutLine(sf::PrimitiveType::Lines);
-            cutLine.append(sf::Vertex{ sf::Vector2f(0.f, cutY), sf::Color(0, 255, 0, 200) });
-            cutLine.append(sf::Vertex{ sf::Vector2f((float)WIDTH, cutY), sf::Color(0, 255, 0, 200) });
-            window.draw(cutLine);
-
-            // 2. Prepara o gráfico do perfil do terreno
-            sf::VertexArray profileGraph(sf::PrimitiveType::LineStrip);
-
-            // Onde o gráfico será desenhado na tela? (Na parte inferior)
-            float graphBaseY = HEIGHT - 80.0f;
-            float amplitude = 60.0f;
-
-            // 3. Caminha sobre o eixo X, extraindo a altura
-            for (float x = 0; x <= WIDTH; x += 1.0f) {
-                float nx = (x + offsetX) * scale;
-                float ny = (cutY + offsetY) * scale; // ny agora varia conforme você move o mouse!
-
-                float noiseValue = (x < WIDTH / 2) ?
-                    pn.noise(nx, ny) :
-                    pn.fBm(nx, ny, octaves, persistence, lacunarity);
-
-                float plotY = graphBaseY - (float)(noiseValue * amplitude);
-                profileGraph.append(sf::Vertex{ sf::Vector2f(x, plotY), sf::Color(255, 255, 0) });
-            }
-
-            // Desenha a linha de base (Zero)
-            sf::VertexArray zeroLine(sf::PrimitiveType::Lines);
-            zeroLine.append(sf::Vertex{ sf::Vector2f(0.f, graphBaseY), sf::Color(255, 165, 0, 100) });
-            zeroLine.append(sf::Vertex{ sf::Vector2f((float)WIDTH, graphBaseY), sf::Color(255, 165, 0, 100) });
-
-            window.draw(zeroLine);
-            window.draw(profileGraph);
-            // ==========================================
         }
 
         window.display();
