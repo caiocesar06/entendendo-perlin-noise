@@ -26,8 +26,8 @@ enum class FadeMode { NONE, CUBIC, QUINTIC };
 const char* fadeName(FadeMode m) {
     switch (m) {
     case FadeMode::NONE:    return "NONE    (linear)";
-    case FadeMode::CUBIC:   return "CUBIC   (3t²-2t³)  [Perlin 1985]";
-    case FadeMode::QUINTIC: return "QUINTIC (6t⁵-15t⁴+10t³) [Perlin 2002]";
+    case FadeMode::CUBIC:   return "CUBIC   (3t^2 - 2t^3)  [Perlin 1985]";
+    case FadeMode::QUINTIC: return "QUINTIC (6t^5 - 15t^4 + 10t^3) [Perlin 2002]";
     }
     return "?";
 }
