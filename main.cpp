@@ -71,16 +71,19 @@ struct PerlinNoise {
     // Função principal do ruído de uma oitava
     float noise(float x, float y) {
         // 1. Encontrar coordenadas da célula (floor)
-        int i = (int)fastFloor(x) & 255;
-        int j = (int)fastFloor(y) & 255;
+        int xi = fastFloor(x);
+        int yi = fastFloor(y);
+
+        int i = xi & 255;
+        int j = yi & 255;
 
         // 2. Posição relativa dentro da célula [0, 1)
-        x -= fastFloor(x);
-        y -= fastFloor(y);
+        float xf = x - xi;
+        float yf = y - yi;
 
         // 3. Aplicar a função fade em u e v
-        float u = fade(x);
-        float v = fade(y);
+        float u = fade(xf);
+        float v = fade(yf);
         // float u = x;
         // float v = y;
 
@@ -91,8 +94,8 @@ struct PerlinNoise {
         int h11 = p[p[i + 1] + j + 1];
 
         // 5. Calcular o dot product de cada canto
-        float x1 = lerp(u, grad(h00, x, y), grad(h10, x - 1, y));
-        float x2 = lerp(u, grad(h01, x, y - 1), grad(h11, x - 1, y - 1));
+        float x1 = lerp(u, grad(h00, xf, yf), grad(h10, xf - 1, yf));
+        float x2 = lerp(u, grad(h01, xf, yf - 1), grad(h11, xf - 1, yf - 1));
 
         // 6. Interpolar tudo de forma bilinear
         return lerp(v, x1, x2);
@@ -113,6 +116,10 @@ struct PerlinNoise {
         }
 
         return total / maxValue;
+    }
+
+    int getHash(int i, int j) const {
+        return p[p[i & 255] + (j & 255)];
     }
 };
 
@@ -152,12 +159,18 @@ int main() {
                 window.close();
             }
 
+            if (auto* scroll = event->getIf<sf::Event::MouseWheelScrolled>()) {
+                float factor = (scroll->delta > 0) ? 0.9f : 1.1f;
+                scale *= factor;
+                needsUpdate = true;
+            }
+
             if (event->is<sf::Event::KeyPressed>()) {
                 auto* keyEvent = event->getIf<sf::Event::KeyPressed>();
 
                 // Pressione Espaço para gerar uma nova semente e forçar o redesenho
                 if (keyEvent && keyEvent->code == sf::Keyboard::Key::Space) {
-                    pn = PerlinNoise(rand());
+                    pn = PerlinNoise(std::random_device{}());
                     offsetX = 0.0f; offsetY = 0.0f;
                     needsUpdate = true;
                 }
@@ -211,9 +224,9 @@ int main() {
                     float nx = (x + offsetX) * scale;
                     float ny = (y + offsetY) * scale;
 
-                    float noiseValue = fBmOn ?
-                        pn.fBm(nx, ny, octaves, persistence, lacunarity) :
-                        pn.noise(nx, ny);
+                    float noiseValue = (x < WIDTH / 2) ?
+                        pn.noise(nx, ny) :
+                        pn.fBm(nx, ny, octaves, persistence, lacunarity);
 
                     float normalized = (noiseValue + 1.0) / 2.0;
 
@@ -245,6 +258,10 @@ int main() {
             texture.update(pixelBuffer.data());
 
             needsUpdate = false;
+
+            // Após qualquer mudança de parâmetro:
+            printf("scale=%.4f | octaves=%d | persistence=%.2f | lacunarity=%.2f | fBm=%s\n",
+                scale, octaves, persistence, lacunarity, fBmOn ? "ON" : "OFF");
         }
 
         window.clear();
@@ -283,7 +300,7 @@ int main() {
                     int i = (int)((x + offsetX) * scale) & 255;
                     int j = (int)((y + offsetY) * scale) & 255;
 
-                    int hash = pn.p[pn.p[i] + j];
+                    int hash = pn.getHash(i, j);
                     int h = hash & 7;
 
                     float gx = G2D[h][0];
@@ -354,9 +371,9 @@ int main() {
                 float nx = (x + offsetX) * scale;
                 float ny = (cutY + offsetY) * scale; // ny agora varia conforme você move o mouse!
 
-                float noiseValue = fBmOn ?
-                    pn.fBm(nx, ny, octaves, persistence, lacunarity) :
-                    pn.noise(nx, ny);;
+                float noiseValue = (x < WIDTH / 2) ?
+                    pn.noise(nx, ny) :
+                    pn.fBm(nx, ny, octaves, persistence, lacunarity);
 
                 float plotY = graphBaseY - (float)(noiseValue * amplitude);
                 profileGraph.append(sf::Vertex{ sf::Vector2f(x, plotY), sf::Color(255, 255, 0) });
