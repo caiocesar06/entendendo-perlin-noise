@@ -48,7 +48,6 @@ cmake --build build --config Release
 Abra o MSYS2 MinGW UCRT64 shell e instale SFML:
 
 ```bash
-# no MSYS2 UCRT64
 pacman -Sy
 pacman -S --noconfirm mingw-w64-ucrt-x86_64-toolchain mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-sfml mingw-w64-ucrt-x86_64-ninja
 cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=/c/msys64/ucrt64/bin/gcc.exe -DCMAKE_CXX_COMPILER=/c/msys64/ucrt64/bin/g++.exe -DUSE_SYSTEM_SFML=ON
@@ -67,6 +66,5 @@ cmake --build build
 Compilar sem CMake (não recomendado — necessário apontar includes e libs do SFML manualmente):
 
 ```bash
-#g++ (exemplo Linux)
 g++ -std=c++17 main.cpp -o PerlinNoise -lsfml-graphics -lsfml-window -lsfml-system
 ```
