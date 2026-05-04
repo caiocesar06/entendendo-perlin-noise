@@ -328,6 +328,7 @@ int main() {
 
             auto t0 = std::chrono::high_resolution_clock::now();
 
+            #pragma omp parallel for
             for (int y = 0; y < (int)HEIGHT; ++y) {
                 for (int x = 0; x < (int)WIDTH; ++x) {
                     float nx = (x + offsetX) * scale;

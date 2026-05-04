@@ -23,6 +23,31 @@ endif()
 # Create executable
 add_executable(PerlinNoise main.cpp)
 
+# ==============================================================================
+# OTIMIZAÇÃO DE HARDWARE E MULTITHREADING
+# ==============================================================================
+
+# 1. Procura pela biblioteca OpenMP no sistema do usuário
+find_package(OpenMP REQUIRED)
+
+# 2. Configura flags de otimização agressiva caso o compilador seja GCC ou Clang
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(PerlinNoise PRIVATE
+        -O3             # Ativa Vetorização (SIMD) e Loop Unrolling
+        -ffast-math     # Relaxa a precisão IEEE-754 para acelerar trigonometria e decimais
+    )
+
+    # Define a macro NDEBUG para remover asserções lentas e bounds-checking do std::vector
+    target_compile_definitions(PerlinNoise PRIVATE NDEBUG)
+endif()
+
+# 3. Faz a linkagem da biblioteca de multithreading ao seu executável
+target_link_libraries(PerlinNoise PRIVATE OpenMP::OpenMP_CXX)
+
+# ==============================================================================
+# LINKAGEM DO SFML
+# ==============================================================================
+
 # Link libraries (SFML 3 uses imported targets named either SFML::Graphics or sfml::Graphics)
 if (TARGET SFML::Graphics)
     target_link_libraries(PerlinNoise PRIVATE SFML::Graphics SFML::Window SFML::System)
