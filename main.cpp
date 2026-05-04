@@ -466,8 +466,7 @@ int main() {
                     float v = fBmOn
                         ? pn.fBm(nx, ny, octaves, persistence, lacunarity)
                         : pn.noise(nx, ny);
-                    profile.append({ sf::Vector2f(x, graphBaseY - v * amplitude),
-                                     sf::Color(255, 255, 0) });
+                    profile.append({ sf::Vector2f(x, graphBaseY - v * amplitude), sf::Color(255, 255, 0) });
                 }
 
                 sf::VertexArray zeroLine(sf::PrimitiveType::Lines);
