@@ -7,6 +7,8 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
+#include <string>
+#include <filesystem>
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Utilitários
@@ -183,6 +185,8 @@ int main() {
     bool needsUpdate = true;
     bool showDebug = false;
     bool fBmOn = true;
+    bool colorMode = false;
+    bool wantScreenshot = false;
 
     // Posição do mouse — atualizada todo frame para o display do valor
     sf::Vector2i lastMousePos(-1, -1);
@@ -235,88 +239,100 @@ int main() {
 
                 switch (key->code) {
 
-                        // Fechar
-                    case sf::Keyboard::Key::Escape:
-                        window.close();
-                        break;
+                    // Fechar
+                case sf::Keyboard::Key::Escape:
+                    window.close();
+                    break;
 
-                        // Nova semente aleatória
-                    case sf::Keyboard::Key::Space:
-                        pn = PerlinNoise(std::random_device{}(), pn.fadeMode);
-                        offsetX = offsetY = 0.0f;
-                        needsUpdate = true;
-                        break;
+                    // Nova semente aleatória
+                case sf::Keyboard::Key::Space:
+                    pn = PerlinNoise(std::random_device{}(), pn.fadeMode);
+                    offsetX = offsetY = 0.0f;
+                    needsUpdate = true;
+                    break;
 
-                        // Debug visual (grade + gradientes + corte)
-                    case sf::Keyboard::Key::Tab:
-                        showDebug = !showDebug;
-                        break;
+                    // Debug visual (grade + gradientes + corte)
+                case sf::Keyboard::Key::Tab:
+                    showDebug = !showDebug;
+                    break;
 
-                        // Toggle fBm
-                    case sf::Keyboard::Key::F:
-                        fBmOn = !fBmOn;
-                        needsUpdate = true;
-                        printStatus();
-                        break;
+                    // Toggle fBm
+                case sf::Keyboard::Key::F:
+                    fBmOn = !fBmOn;
+                    needsUpdate = true;
+                    printStatus();
+                    break;
 
-                        // Cicla modo de fade: NONE → CUBIC → QUINTIC → NONE ...
-                    case sf::Keyboard::Key::V:
-                        pn.fadeMode = (FadeMode)(((int)pn.fadeMode + 1) % 3);
-                        needsUpdate = true;
-                        printStatus();
-                        break;
+                    // Cicla modo de fade: NONE → CUBIC → QUINTIC → NONE ...
+                case sf::Keyboard::Key::V:
+                    pn.fadeMode = (FadeMode)(((int)pn.fadeMode + 1) % 3);
+                    needsUpdate = true;
+                    printStatus();
+                    break;
 
-                        // Oitavas
-                    case sf::Keyboard::Key::O:
-                        octaves = std::max(1, octaves - 1);
-                        needsUpdate = true; printStatus(); break;
-                    case sf::Keyboard::Key::P:
-                        octaves = std::min(16, octaves + 1);
-                        needsUpdate = true; printStatus(); break;
+                    // Oitavas
+                case sf::Keyboard::Key::I:
+                    octaves = std::max(1, octaves - 1);
+                    needsUpdate = true; printStatus(); break;
+                case sf::Keyboard::Key::O:
+                    octaves = std::min(16, octaves + 1);
+                    needsUpdate = true; printStatus(); break;
 
-                        // Persistência
-                    case sf::Keyboard::Key::Num1:
-                    case sf::Keyboard::Key::Numpad1:
-                        persistence = std::max(0.0f, persistence - 0.05f);
-                        needsUpdate = true; printStatus(); break;
-                    case sf::Keyboard::Key::Num2:
-                    case sf::Keyboard::Key::Numpad2:
-                        persistence = std::min(2.0f, persistence + 0.05f);
-                        needsUpdate = true; printStatus(); break;
+                    // Persistência
+                case sf::Keyboard::Key::Num1:
+                case sf::Keyboard::Key::Numpad1:
+                    persistence = std::max(0.0f, persistence - 0.05f);
+                    needsUpdate = true; printStatus(); break;
+                case sf::Keyboard::Key::Num2:
+                case sf::Keyboard::Key::Numpad2:
+                    persistence = std::min(2.0f, persistence + 0.05f);
+                    needsUpdate = true; printStatus(); break;
 
-                        // Lacunaridade
-                    case sf::Keyboard::Key::Num3:
-                    case sf::Keyboard::Key::Numpad3:
-                        lacunarity = std::max(1.0f, lacunarity - 0.1f);
-                        needsUpdate = true; printStatus(); break;
-                    case sf::Keyboard::Key::Num4:
-                    case sf::Keyboard::Key::Numpad4:
-                        lacunarity += 0.1f;
-                        needsUpdate = true; printStatus(); break;
+                    // Lacunaridade
+                case sf::Keyboard::Key::Num3:
+                case sf::Keyboard::Key::Numpad3:
+                    lacunarity = std::max(1.0f, lacunarity - 0.1f);
+                    needsUpdate = true; printStatus(); break;
+                case sf::Keyboard::Key::Num4:
+                case sf::Keyboard::Key::Numpad4:
+                    lacunarity += 0.1f;
+                    needsUpdate = true; printStatus(); break;
 
-                        // Posterização
-                    case sf::Keyboard::Key::Z:
-                        degrees = std::max(2.0f, degrees - 1.0f);
-                        needsUpdate = true; break;
-                    case sf::Keyboard::Key::X:
-                        degrees += 1.0f;
-                        needsUpdate = true; break;
+                    // Posterização
+                case sf::Keyboard::Key::Z:
+                    degrees = std::max(2.0f, degrees - 1.0f);
+                    needsUpdate = true; break;
+                case sf::Keyboard::Key::X:
+                    degrees += 1.0f;
+                    needsUpdate = true; break;
 
-                        // Navegação (câmera)
-                    case sf::Keyboard::Key::W:
-                        offsetY -= 20.0f / scale * 0.01f;
-                        needsUpdate = true; break;
-                    case sf::Keyboard::Key::S:
-                        offsetY += 20.0f / scale * 0.01f;
-                        needsUpdate = true; break;
-                    case sf::Keyboard::Key::A:
-                        offsetX -= 20.0f / scale * 0.01f;
-                        needsUpdate = true; break;
-                    case sf::Keyboard::Key::D:
-                        offsetX += 20.0f / scale * 0.01f;
-                        needsUpdate = true; break;
+                    // Navegação (câmera)
+                case sf::Keyboard::Key::W:
+                    offsetY -= 20.0f / scale * 0.01f;
+                    needsUpdate = true; break;
+                case sf::Keyboard::Key::S:
+                    offsetY += 20.0f / scale * 0.01f;
+                    needsUpdate = true; break;
+                case sf::Keyboard::Key::A:
+                    offsetX -= 20.0f / scale * 0.01f;
+                    needsUpdate = true; break;
+                case sf::Keyboard::Key::D:
+                    offsetX += 20.0f / scale * 0.01f;
+                    needsUpdate = true; break;
 
-                    default: break;
+                    // Print
+                case sf::Keyboard::Key::P:
+                    wantScreenshot = true;
+                    break;
+
+                    // Toggle Cores (Biomas)
+                case sf::Keyboard::Key::G:
+                    colorMode = !colorMode;
+                    needsUpdate = true;
+                    printf("Modo Cores: %s\n", colorMode ? "ON" : "OFF");
+                    break;
+
+                default: break;
                 }
             }
         }
@@ -328,7 +344,7 @@ int main() {
 
             auto t0 = std::chrono::high_resolution_clock::now();
 
-            #pragma omp parallel for
+#pragma omp parallel for
             for (int y = 0; y < (int)HEIGHT; ++y) {
                 for (int x = 0; x < (int)WIDTH; ++x) {
                     float nx = (x + offsetX) * scale;
@@ -340,14 +356,31 @@ int main() {
 
                     float normalized = (val + 1.0f) / 2.0f;
                     float posterized = fastFloor(normalized * degrees) / degrees;
-                    int   c = (int)(posterized * 255.0f);
-                    if (c < 0)   c = 0;
-                    if (c > 255) c = 255;
+
+                    uint8_t r, g, b;
+
+                    if (colorMode) {
+                        float h = posterized;
+                        if (h < 0.38f)      { r = 30;  g = 60;  b = 150; } // Água funda
+                        else if (h < 0.45f) { r = 60;  g = 120; b = 210; } // Água rasa
+                        else if (h < 0.49f) { r = 210; g = 190; b = 130; } // Areia da praia
+                        else if (h < 0.55f) { r = 70;  g = 160; b = 60; } // Grama / Planície
+                        else if (h < 0.61f) { r = 50;  g = 110; b = 40; } // Floresta densa
+                        else if (h < 0.67f) { r = 110; g = 110; b = 115; } // Rocha / Montanha
+                        else                { r = 240; g = 240; b = 250; } // Neve
+                    }
+                    else {
+                        // Escala de cinza original
+                        int c = (int)(posterized * 255.0f);
+                        if (c < 0)   c = 0;
+                        if (c > 255) c = 255;
+                        r = g = b = (uint8_t)c;
+                    }
 
                     int idx = (y * WIDTH + x) * 4;
-                    pixelBuffer[idx + 0] = (uint8_t)c;
-                    pixelBuffer[idx + 1] = (uint8_t)c;
-                    pixelBuffer[idx + 2] = (uint8_t)c;
+                    pixelBuffer[idx + 0] = r;
+                    pixelBuffer[idx + 1] = g;
+                    pixelBuffer[idx + 2] = b;
                     pixelBuffer[idx + 3] = 255;
                 }
             }
@@ -476,6 +509,29 @@ int main() {
                 window.draw(zeroLine);
                 window.draw(profile);
             }
+        }
+
+        if (wantScreenshot) {
+            sf::Texture screenTexture;
+            sf::Image blank(sf::Vector2u(window.getSize().x, window.getSize().y), sf::Color::Black);
+
+            if (screenTexture.loadFromImage(blank)) {
+                screenTexture.update(window);
+
+                std::string filename = "../figs/print_" + std::to_string(std::time(nullptr)) + ".png";
+
+                if (screenTexture.copyToImage().saveToFile(filename)) {
+                    std::string caminhoCompleto = std::filesystem::absolute(filename).string();
+
+                    printf("\n[Screenshot] Salvo com sucesso!\n");
+                    printf(">> Local exato: %s\n", caminhoCompleto.c_str());
+                }
+                else {
+                    printf("\n[Erro] Falha ao salvar a screenshot.\n");
+                }
+            }
+
+            wantScreenshot = false;
         }
 
         window.display();

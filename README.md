@@ -38,8 +38,8 @@ Build (recomendado — usa SFML do sistema quando disponível):
 ```bash
 sudo apt update
 sudo apt install -y build-essential cmake libsfml-dev ninja-build
-cmake -S . -B build -G Ninja -DUSE_SYSTEM_SFML=ON
-cmake --build build --config Release
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DUSE_SYSTEM_SFML=ON
+cmake --build build
 ./build/PerlinNoise
 ```
 
@@ -48,18 +48,28 @@ cmake --build build --config Release
 Abra o MSYS2 MinGW UCRT64 shell e instale SFML:
 
 ```bash
-pacman -Sy
+pacman -Syu
 pacman -S --noconfirm mingw-w64-ucrt-x86_64-toolchain mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-sfml mingw-w64-ucrt-x86_64-ninja
-cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=/c/msys64/ucrt64/bin/gcc.exe -DCMAKE_CXX_COMPILER=/c/msys64/ucrt64/bin/g++.exe -DUSE_SYSTEM_SFML=ON
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=/c/msys64/ucrt64/bin/gcc.exe -DCMAKE_CXX_COMPILER=/c/msys64/ucrt64/bin/g++.exe -DUSE_SYSTEM_SFML=ON
 cmake --build build
 ./build/PerlinNoise.exe
+```
+
+### Windows (sem MSYS2, apenas CMake):
+
+Requisitos: Visual Studio Build Tools (C++), CMake e Git instalados.
+
+```bash
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DUSE_SYSTEM_SFML=OFF
+cmake --build build --config Release
+./build/Release/PerlinNoise.exe
 ```
 
 ### Alternativas de Build
 Deixar o CMake baixar e compilar o SFML automaticamente (pode levar mais tempo):
 
 ```bash
-cmake -S . -B build -G Ninja -DUSE_SYSTEM_SFML=OFF
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DUSE_SYSTEM_SFML=OFF
 cmake --build build
 ```
 
