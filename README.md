@@ -20,7 +20,7 @@ O projeto permite a exploração da malha vetorial com câmera dinâmica, ajuste
 | **TAB** | Modo Analítico | Alterna a exibição da grade de células, vetores gradientes (com setas direcionais) e o corte transversal interativo |
 | **F** | Modo fBm | Liga/desliga o *Fractal Brownian Motion*, alternando entre a oitava base isolada e a composição fractal complexa |
 | **V** | Modo de Fade | Alterna a curva matemática de suavização entre Linear (Grade visível), Cúbica (Perlin 1985) e Quíntica (Perlin 2002) |
-| **O / P** | Oitavas | Aumenta/diminui as frequências sobrepostas no algoritmo fBm (Limites: 1 a 16) |
+| **I / O** | Oitavas | Aumenta/diminui as frequências sobrepostas no algoritmo fBm (Limites: 1 a 16) |
 | **1 / 2** | Persistência | Modifica o multiplicador de atenuação de amplitude a cada oitava |
 | **3 / 4** | Lacunaridade | Modifica o multiplicador de crescimento de frequência a cada oitava |
 | **Z / X** | Posterização | Aumenta/diminui a resolução das "fatias" de cores para visualização de isolinhas |
