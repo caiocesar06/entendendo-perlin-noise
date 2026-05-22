@@ -195,10 +195,11 @@ int main() {
 
     auto printStatus = [&]() {
         printf("scale=%.4f | octaves=%d | persistence=%.2f | lacunarity=%.2f"
-            " | fBm=%s | fade=%s\n\n",
+            " | fBm=%s | fade=%s | posterization=%.0f\n\n",
             scale, octaves, persistence, lacunarity,
             fBmOn ? "ON" : "OFF",
-            fadeName(pn.fadeMode));
+            fadeName(pn.fadeMode),
+            degrees);
         };
 
     // ── Loop principal ────────────────────────────────────────────────────────
@@ -354,20 +355,43 @@ int main() {
                         ? pn.fBm(nx, ny, octaves, persistence, lacunarity)
                         : pn.noise(nx, ny);
 
-                    float normalized = (val + 1.0f) / 2.0f;
+                    float normalized = std::clamp((val + 0.7f) / 1.4f, 0.0f, 1.0f);
                     float posterized = fastFloor(normalized * degrees) / degrees;
 
                     uint8_t r, g, b;
 
                     if (colorMode) {
-                        float h = posterized;
-                        if (h < 0.38f)      { r = 30;  g = 60;  b = 150; } // Água funda
-                        else if (h < 0.45f) { r = 60;  g = 120; b = 210; } // Água rasa
-                        else if (h < 0.49f) { r = 210; g = 190; b = 130; } // Areia da praia
-                        else if (h < 0.55f) { r = 70;  g = 160; b = 60; } // Grama / Planície
-                        else if (h < 0.61f) { r = 50;  g = 110; b = 40; } // Floresta densa
-                        else if (h < 0.67f) { r = 110; g = 110; b = 115; } // Rocha / Montanha
-                        else                { r = 240; g = 240; b = 250; } // Neve
+                        int level = std::clamp(
+                            (int)(normalized * degrees),
+                            0,
+                            (int)degrees - 1
+                        );
+
+                        int t0 = (int)(0.38f * degrees); // funda  → rasa
+                        int t1 = (int)(0.45f * degrees); // rasa   → areia
+                        int t2 = (int)(0.49f * degrees); // areia  → grama
+                        int t3 = (int)(0.55f * degrees); // grama  → floresta
+                        int t4 = (int)(0.61f * degrees); // floresta → rocha
+                        int t5 = (int)(0.67f * degrees); // rocha  → neve
+
+                        uint8_t br, bg, bb;
+                        if (level < t0)      { br = 30; bg = 60; bb = 150; }    // Água funda
+                        else if (level < t1) { br = 60; bg = 120; bb = 210; }   // Água rasa
+                        else if (level < t2) { br = 210; bg = 190; bb = 130; }  // Areia
+                        else if (level < t3) { br = 70; bg = 160; bb = 60; }    // Grama
+                        else if (level < t4) { br = 50; bg = 110; bb = 40; }    // Floresta
+                        else if (level < t5) { br = 110; bg = 110; bb = 115; }  // Rocha
+                        else                 { br = 240; bg = 240; bb = 250; }  // Neve
+
+                        float shade = 0.80f + 0.20f * ((float)level / (float)std::max(1, (int)degrees - 1));
+
+                        bool atBiomeBorder = (level == t0 || level == t1 || level == t2 ||
+                            level == t3 || level == t4 || level == t5);
+                        if (atBiomeBorder) shade *= 0.72f;
+
+                        r = (uint8_t)std::clamp((int)(br * shade), 0, 255);
+                        g = (uint8_t)std::clamp((int)(bg * shade), 0, 255);
+                        b = (uint8_t)std::clamp((int)(bb * shade), 0, 255);
                     }
                     else {
                         // Escala de cinza original
